@@ -25,7 +25,7 @@ def transcribe_tracks(tracks,session,config):
     job={'tracks':manifest,'model_root':section['model_root'],'output':str(work/'words.json'),'cache':str(work/'chunks.json'),'ffmpeg':section['ffmpeg']}
     jobpath=work/'job.json';jobpath.write_text(json.dumps(job,ensure_ascii=False,indent=2),'utf-8')
     print('Transcribing locally with GigaAM-v3 (offline worker).',flush=True)
-    subprocess.run([section['python'],'-X','utf8','-B',section['worker'],'--job',str(jobpath)],check=True)
+    subprocess.run([section['python'],'-X','utf8','-B',str(Path(section.get('worker') or Path(__file__).with_name('gigaam_worker.py'))),'--job',str(jobpath)],check=True)
     rows=json.loads((work/'words.json').read_text('utf-8'))
     (session/'transcript.partial.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),'utf-8')
     (session/'speech-engine.json').write_text(json.dumps({'engine':'gigaam-v3','model':'v3_e2e_rnnt','offline':True,'tracks':[{'source':t['source'],'sha256':t['sha256'],'chunks':len(t['chunks'])} for t in manifest]},ensure_ascii=False,indent=2),'utf-8')

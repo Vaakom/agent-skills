@@ -2,7 +2,7 @@
 name: dion-secretary
 description: Record Dion meetings on Windows, transcribe locally and prepare Russian minutes with Codex by default or a local model on explicit request. Use for recording, stopping and processing Dion meeting recordings.
 metadata:
-  version: "1.12.0"
+  version: "1.12.1"
 ---
 
 # Dion secretary
@@ -63,7 +63,7 @@ New notes link to the latest earlier note with the exact same meeting title. Sim
 
 ## Checks and maintenance
 
-`doctor` checks audio devices, speech assets, recording and local Ollama; it may start the configured loopback server. Local Ollama must use `http://127.0.0.1:11435`. `setup-models` explicitly downloads configured Whisper/Ollama models; GigaAM requires a separately installed worker. `self-test --audio SYNTHETIC_WAV` runs synthetic speech and local-summary checks; without audio it checks only local summary generation. Never record a live meeting to test setup.
+`doctor` checks audio devices, speech assets, recording and local Ollama; it may start the configured loopback server. Local Ollama must use `http://127.0.0.1:11435`. `setup-models` explicitly downloads configured Whisper/Ollama models; GigaAM uses the bundled `scripts/gigaam_worker.py` and `scripts/gigaam_loader.py`, with an external environment and model directory. `scripts/setup_gigaam.py` explicitly installs model assets; `scripts/verify_gigaam.py` checks the worker offline using synthetic silence. See [setup.md](references/setup.md). `self-test --audio SYNTHETIC_WAV` runs synthetic speech and local-summary checks; without audio it checks only local summary generation. Never record a live meeting to test setup.
 
 Install the pinned `scripts/requirements.txt` into an external environment. PyAV 16.1.0 is pinned because newer incompatible versions previously broke decoding. No remote summary fallback or unrelated networking/VPN/audio/security changes.
 

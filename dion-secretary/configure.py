@@ -14,6 +14,9 @@ def configure(args):
         settings[key] = str(path)
     settings['speech_model_dir'] = str(Path(settings['downloads']) / 'Models' / 'whisper-large-v3')
     settings['ollama_model_dir'] = str(Path(settings['downloads']) / 'Models' / 'ollama')
+    settings['gigaam']['model_root'] = str(Path(settings['downloads']) / 'Models' / 'GigaAM-v3')
+    settings['gigaam']['python'] = str(Path(settings['runtime']) / 'gigaam-venv' / 'Scripts' / 'python.exe')
+    settings['gigaam']['ffmpeg'] = str(Path(settings['runtime']) / 'tools' / 'ffmpeg' / 'ffmpeg.exe')
     with target.open('x', encoding='utf-8') as stream:
         json.dump(settings, stream, ensure_ascii=False, indent=2)
         stream.write('\n')

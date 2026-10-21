@@ -15,5 +15,11 @@
   "diarization": {
     "enabled": false
   },
-  "transcript_redactions": []
+  "transcript_redactions": [],
+  "gigaam": {
+    "python": "C:/path/to/external-gigaam-environment/python.exe",
+    "model_root": "C:/path/to/downloads/Models/GigaAM-v3",
+    "ffmpeg": "C:/path/to/ffmpeg.exe",
+    "model": "v3_e2e_rnnt"
+  }
 }

@@ -44,7 +44,7 @@ def main():
         loader = unittest.TestLoader()
         for name in ('test_diarization', 'test_evidence_minutes', 'test_meeting_links',
                      'test_recording_reminders', 'test_minutes_modes', 'test_youtube_library',
-                     'test_portability', 'test_homework'):
+                     'test_portability', 'test_homework', 'test_gigaam_bundle'):
             suite.addTests(loader.loadTestsFromModule(importlib.import_module(name)))
         # This legacy integration check exposes a callable rather than unittest cases.
         suite.addTest(unittest.FunctionTestCase(importlib.import_module('test_process_diarization').test))

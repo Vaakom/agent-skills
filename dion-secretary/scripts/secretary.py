@@ -284,7 +284,7 @@ def model_path():
 
 def setup_models():
     if CONFIG.get('speech_engine','whisper') == 'gigaam-v3':
-        if not speech_ready():raise RuntimeError('GigaAM local installation is incomplete; restore assets through products/asr-comparison')
+        if not speech_ready():raise RuntimeError('GigaAM local installation is incomplete; see references/setup.md and the bundled GigaAM setup/check scripts')
         output({'speech_engine':'gigaam-v3','speech_model_ready':True,'downloads_attempted':False})
         return
     if (model_path() / 'model.bin').exists():
@@ -524,7 +524,7 @@ def process(args):
 def speech_ready():
     if CONFIG.get('speech_engine','whisper') == 'gigaam-v3':
         cfg=CONFIG['gigaam']; folder=Path(cfg['model_root'])/'huggingface-e2e-rnnt'
-        return Path(cfg['python']).is_file() and Path(cfg['worker']).is_file() and all((folder/name).is_file() for name in ['config.json','tokenizer.model','pytorch_model.bin','provenance.json'])
+        return Path(cfg['python']).is_file() and Path(cfg.get('worker') or Path(__file__).with_name('gigaam_worker.py')).is_file() and all((folder/name).is_file() for name in ['config.json','tokenizer.model','pytorch_model.bin','provenance.json'])
     return (model_path()/'model.bin').is_file()
 
 

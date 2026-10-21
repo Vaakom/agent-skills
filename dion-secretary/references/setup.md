@@ -8,7 +8,30 @@ The example selects Whisper large-v3 with CPU/int8 and Codex minutes. Install th
 
 Install Dion Speaker Helper separately from the owner's `dion-speaker-helper` GitHub repository. Recording needs version 0.6.0 or later with fresh lifecycle-capable journals. Set `journal_root` to the journal directory reported by the extension/native host. Existing audio files can be transcribed without a live journal; absent observations remain unknown names.
 
-Optional GigaAM-v3 requires an external offline worker and models. Set `speech_engine=gigaam-v3` and the `gigaam` object: `python`, `worker`, `model_root`, `ffmpeg`, `model`. The worker must accept `--job JSON` as used by `scripts/gigaam_adapter.py` and emit rows with start/end/speaker/text. This installation is not bundled or provisioned by this repository; retain Whisper unless that worker is already configured. The repository does not claim a standalone GigaAM installer.
+## Optional GigaAM-v3
+
+The worker, Hugging Face loader, model-setup command and offline check are included in `scripts/`. No code from a separate `products` folder is needed. Third-party packages and model weights remain external dependencies.
+
+Create an isolated Python 3.12 environment outside the repository. Install `scripts/requirements-gigaam.txt` there, with a separately chosen pip cache directory. This pins the upstream GigaAM source revision; it does not copy the third-party library into the skill. Keep FFmpeg outside the repository too. Existing installations do not need to reinstall packages just because the worker moved.
+
+Set `speech_engine=gigaam-v3`. In `gigaam`, set absolute `python`, `model_root`, `ffmpeg` paths and `model=v3_e2e_rnnt`. `configure.py` provides editable external-path defaults. Omit `worker` to use the bundled `scripts/gigaam_worker.py`; an explicit custom `worker` remains supported for compatibility.
+
+Only when model installation is explicitly requested, run the following with the GigaAM environment's interpreter:
+
+```text
+GIGAAM_PYTHON -X utf8 -B scripts/setup_gigaam.py --model-root ABSOLUTE_EXTERNAL_MODELS_DIRECTORY
+```
+
+This command downloads official model assets into that directory and verifies hashes and strict state loading. It does not read meeting data. Existing model folders with `huggingface-e2e-rnnt/config.json`, `tokenizer.model`, `pytorch_model.bin` and `provenance.json` can be reused without downloading.
+
+Verify the selected installation with the same interpreter:
+
+```text
+GIGAAM_PYTHON -X utf8 -B scripts/verify_gigaam.py --config ABSOLUTE_CONFIG_JSON
+```
+
+This uses generated silence, blocks network access, decodes the WAV and invokes the worker with actual local weights. It does not record audio or open an existing meeting. Processing remains offline and never provisions missing assets automatically.
+
 
 Optional voice clustering needs `diarization.enabled=true`, an interpreter with sherpa-onnx, a segmentation ONNX model, embedding ONNX model, FFmpeg and `threshold`. The main requirements do not install these optional models or that environment. Choose voice mode explicitly.
 
