@@ -1,0 +1,19 @@
+{
+  "runtime": "C:/path/to/runtime",
+  "downloads": "C:/path/to/downloads",
+  "sessions": "C:/path/to/recordings",
+  "notes": "C:/path/to/vault/meetings/Dion",
+  "journal_root": "C:/path/to/speaker-helper/journals",
+  "speech_engine": "whisper",
+  "speech_model": "large-v3",
+  "speech_model_dir": "C:/path/to/downloads/Models/whisper-large-v3",
+  "speech_condition_on_previous_text": true,
+  "ollama_url": "http://127.0.0.1:11435",
+  "ollama_model_dir": "C:/path/to/downloads/Models/ollama",
+  "minutes_model": "qwen3.5:9b",
+  "minutes_provider": "codex",
+  "diarization": {
+    "enabled": false
+  },
+  "transcript_redactions": []
+}

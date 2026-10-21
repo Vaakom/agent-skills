@@ -1,0 +1,5 @@
+{
+  "vault": "C:/path/to/vault",
+  "runtime": "C:/path/to/youtube-runtime",
+  "python": "C:/path/to/external-environment/python.exe"
+}

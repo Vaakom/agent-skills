@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dion — секретарь встреч"
+  short_description: "Запись Dion, локальная расшифровка и резюме Codex"
+  default_prompt: "Используй $dion-secretary для записи встречи Dion и создания резюме с помощью Codex."

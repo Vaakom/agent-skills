@@ -1,0 +1,4 @@
+interface:
+  display_name: "YouTube Library"
+  short_description: "Плейлисты и лайки YouTube в локальную медиатеку"
+  default_prompt: "Используй $youtube-library, чтобы обновить мою медиатеку YouTube."

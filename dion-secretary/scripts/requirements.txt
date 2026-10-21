@@ -1,0 +1,4 @@
+faster-whisper==1.2.1
+av==16.1.0
+pyaudiowpatch==0.2.12.9
+PyYAML>=6,<7
