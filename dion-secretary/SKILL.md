@@ -2,7 +2,7 @@
 name: dion-secretary
 description: Record Dion meetings on Windows, transcribe locally and prepare Russian minutes with Codex by default or a local model on explicit request. Use for recording, stopping and processing Dion meeting recordings.
 metadata:
-  version: "1.12.1"
+  version: "1.12.2"
 ---
 
 # Dion secretary

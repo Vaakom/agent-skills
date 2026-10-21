@@ -1,7 +1,7 @@
 """Select independent browser journals by recording time; never silently mix meetings."""
-import json,datetime as dt,wave
+import json,datetime as dt,wave,os
 from pathlib import Path
-DEFAULT_ROOT=Path(__file__).resolve().parents[3] / 'products' / 'dion-speaker-helper' / 'runtime' / 'journals'
+DEFAULT_ROOT=Path(os.environ.get('DION_JOURNALS_ROOT', str(Path(os.environ.get('DION_HELPER_RUNTIME', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home()/'.local/share'))) / 'DionSpeakerHelper' / 'runtime'))) / 'journals')))
 
 def prepare_journal(session,root=DEFAULT_ROOT,choice=None):
     session=Path(session);root=Path(root)

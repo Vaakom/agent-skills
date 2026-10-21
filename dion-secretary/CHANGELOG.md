@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.2 - 2026-10-22
+
+- Discover default speaker journals from explicit DION_JOURNALS_ROOT / DION_HELPER_RUNTIME or external application data rather than the obsolete in-vault runtime. Explicit journal_root remains authoritative.
+
 ## 1.12.1 - 2026-10-22
 
 - Move the maintained GigaAM worker and model loader into this skill; default processing no longer needs a products directory or an absolute worker path.
