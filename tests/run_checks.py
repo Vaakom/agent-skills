@@ -17,6 +17,9 @@ def unavailable(*args, **kwargs):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     sys.dont_write_bytecode = True
     for folder in ('dion-secretary/scripts', 'youtube-library/scripts', 'mesh-homework/scripts', 'tests'):
         sys.path.insert(0, str(ROOT / folder))

@@ -10,4 +10,4 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -B tests/run_checks.py
+      - run: python -X utf8 -B tests/run_checks.py
