@@ -1,5 +1,7 @@
 {
   "vault": "C:/path/to/vault",
   "runtime": "C:/path/to/youtube-runtime",
-  "python": "C:/path/to/external-environment/python.exe"
+  "python": "C:/path/to/external-environment/python.exe",
+  "ollama_executable": "C:/path/to/ollama.exe",
+  "ollama_models": "C:/path/to/external-models"
 }

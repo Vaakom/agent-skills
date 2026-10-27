@@ -8,6 +8,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,10 +41,17 @@ def main():
         config_file = work / 'config.json'
         config_file.write_text(json.dumps(config), 'utf-8')
         os.environ['DION_SECRETARY_CONFIG'] = str(config_file)
+        # Fail before loading tests if the recorder ignores the isolated config.
+        import secretary
+        assert secretary.CONFIG_PATH == config_file.resolve()
+        assert secretary.ROOT == work / 'runtime'
+        assert secretary.SESSIONS == work / 'sessions'
+        assert secretary.CONFIG['notes'] == str(work / 'notes')
         suite = unittest.TestSuite()
         loader = unittest.TestLoader()
         for name in ('test_diarization', 'test_evidence_minutes', 'test_meeting_links',
-                     'test_recording_reminders', 'test_minutes_modes', 'test_youtube_library',
+                     'test_recording_reminders', 'test_minutes_modes', 'test_transcript_links', 'test_youtube_library',
+                     'test_classifier_runtime',
                      'test_portability', 'test_homework', 'test_gigaam_bundle'):
             suite.addTests(loader.loadTestsFromModule(importlib.import_module(name)))
         # This legacy integration check exposes a callable rather than unittest cases.
@@ -51,7 +59,8 @@ def main():
         for skill in ('dion-secretary', 'mesh-homework', 'youtube-library'):
             for source in (ROOT / skill / 'scripts').glob('*.py'):
                 ast.parse(source.read_text('utf-8'), filename=str(source))
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        with patch.object(secretary, 'devices', side_effect=AssertionError('Physical audio access is forbidden in synthetic checks')):
+            result = unittest.TextTestRunner(verbosity=2).run(suite)
         return 0 if result.wasSuccessful() else 1
 
 

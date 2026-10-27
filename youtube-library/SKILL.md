@@ -1,5 +1,7 @@
 ---
 name: youtube-library
+metadata:
+  version: "1.0.2"
 description: Import the user's own YouTube playlists and liked videos through read-only YouTube API or a local Google Takeout archive, classify locally, and update Markdown in context/Media Library. Use for Обнови медиатеку YouTube or Импортируй архив YouTube. Does not download media or change YouTube content.
 ---
 
@@ -7,7 +9,11 @@ description: Import the user's own YouTube playlists and liked videos through re
 
 Use `scripts/youtube_library.py` with a configured external Python environment. Read ignored `config.local.json` if present for this computer's interpreter and paths. For a new installation copy `config.example.json` to `config.local.json` and set absolute `vault`, `runtime` and `python` paths, or supply `--vault PATH --runtime PATH` before the command. Output is `context/Media Library` inside that vault. All generated filenames are English; note contents are Russian. Read-only Google access, local processing, no external AI services.
 
+Read references/local.md if present for verified machine settings; it is excluded from Git.
+
 ## Commands
+
+Before an actual sync/import, scripts/classifier_runtime.py --start may reuse or start the explicitly configured local Ollama installation. Set ollama_executable and ollama_models in ignored config.local.json; runtime selects its log folder. Without --start the helper checks status only. It never downloads or substitutes models, or starts services merely for status requests. Missing service/model retains the Review fallback.
 
 - **Обнови медиатеку YouTube**: run `sync`; report counts, Review items and completeness limits. Own playlists only. Saved third-party playlists, watch history and Watch Later are outside this skill.
 - **Импортируй архив YouTube PATH**: run `import-takeout --input "PATH"` for ZIP or an extracted directory. Import only supported playlist/like files; report unrecognized files and missing likes. Never treat missing data as an empty collection.

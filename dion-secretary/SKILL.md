@@ -2,7 +2,7 @@
 name: dion-secretary
 description: Record Dion meetings on Windows, transcribe locally and prepare Russian minutes with Codex by default or a local model on explicit request. Use for recording, stopping and processing Dion meeting recordings.
 metadata:
-  version: "1.12.2"
+  version: "2.1.3"
 ---
 
 # Dion secretary
@@ -24,11 +24,11 @@ A request such as «Пиши встречу <название>» authorizes star
 
 Loopback captures all sound on that output, not just Dion. Explain this when starting and suggest headphones to prevent duplicated audio. Do not automate login or change browser permissions.
 
-Start requires one fresh lifecycle-capable journal from Dion Speaker Helper 0.6.0 or later. If several meetings are active, select one using `--meeting-journal DIRECTORY`; do not choose silently. Reload an updated unpacked extension before testing it. A missing or incompatible journal blocks capture before it starts.
+Fresh lifecycle-capable journals enable speaker-name observation and meeting-window binding. Select among several meetings explicitly using --meeting-journal DIRECTORY. Missing, ambiguous or incompatible journals do not block requested audio capture: report the limits on names and individual-window observation. Reload an updated unpacked extension before testing it.
 
-The recorder stops when the bound tab/window closes, all Chrome windows disappear, or the extension observes the participant interface disappearing for at least eight seconds after detecting a meeting. The last case depends on Dion selectors and requires live validation. Reload, silence, stale journals, native disconnection or another tab closing alone do not stop recording. The independent Chrome window check has a two-second debounce.
+Stop automatically only when the bound meeting window closes or all Chrome windows disappear. Tab-only closure, navigation, disappearing participants and apparent meeting end produce uncertain advisories while audio continues. Missing/stale journals, monitor failures and unknown probes are not closure evidence. Whole-browser closure requires previously observed Chrome windows and two seconds of confirmed absence; minimized windows remain open. Without confirmed journal binding only whole-browser closure can be monitored reliably.
 
-Audio closes before a detached Windows notification requests display of title and stop reason. The reason is saved in `stop-reason.json`. Separate reminders request notifications at 60 minutes and every 30 minutes afterwards; missed intervals after sleep are skipped. Notification failures are logged without interrupting recording; Windows settings may suppress display. These are desktop notifications, not automatic chat messages. Automatic stop does not start transcription.
+Close both WAV tracks and save stop-reason.json before launching the detached prominent Windows completion dialog. It requests a system sound and remains until acknowledged. Notification failures do not invalidate saved audio. Delivery is retained in meeting-completion.json; advisory evidence in meeting-observations.jsonl. Separate reminders request desktop notifications at 60 minutes and every 30 minutes afterwards; missed intervals are skipped. Windows settings may suppress display. These are not chat messages. Automatic stop does not start transcription.
 
 Immediately report failed stages, timeouts and unexpected worker exit before diagnosing or retrying. If start failed, explicitly say «Запись не началась». Check actual audio duration and worker state: a WAV header alone is not captured audio. Preserve partial sources. Distinguish recorded audio, completed transcription and completed minutes. Do not promise chat monitoring after the turn ends.
 
@@ -68,3 +68,11 @@ New notes link to the latest earlier note with the exact same meeting title. Sim
 Install the pinned `scripts/requirements.txt` into an external environment. PyAV 16.1.0 is pinned because newer incompatible versions previously broke decoding. No remote summary fallback or unrelated networking/VPN/audio/security changes.
 
 Run the repository's synthetic checks before publication; these do not prove live audio, real browser attribution or semantic correctness. When changing this skill, update `metadata.version` and `CHANGELOG.md` together using semantic versioning and actual checks. Preserve local operational history outside public Git; ordinary meeting processing is not a new release.
+
+## Transcript links
+
+Transcript paragraphs receive stable unique Obsidian block anchors. The bundled transcript_links.py converts minutes timestamp references and ranges to links to the corresponding transcript blocks; a missing exact time uses the preceding block. Existing code and links remain unchanged. Adding anchors to old transcripts preserves a backup. Do not bypass source-hash protection.
+
+## Workflow maintenance
+
+Review [WORKFLOW.md](WORKFLOW.md) whenever this skill changes. Update affected steps, branches, tools, commands, outputs and limitations in the same change. Otherwise verify that the diagram remains accurate. Keep it compact and label each action with its implementing tool.

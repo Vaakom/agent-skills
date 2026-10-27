@@ -7,6 +7,14 @@ def digest(path):
 def prepare(transcript,target,title,created,session,provider='codex'):
     if provider not in ('codex','local'):raise ValueError('Unknown minutes provider')
     transcript=Path(transcript).resolve();target=Path(target).resolve()
+    from transcript_links import anchor_transcript
+    original=transcript.read_text('utf-8')
+    anchored=anchor_transcript(original)
+    if anchored != original:
+        stamp=dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+        shutil.copy2(transcript,transcript.with_name(transcript.name+'.'+stamp+'.bak'))
+        temp=transcript.with_suffix('.anchors.tmp')
+        temp.write_text(anchored,'utf-8');temp.replace(transcript)
     data={'state':'awaiting_'+provider,'provider':provider,'transcript':str(transcript),
         'source_sha256':digest(transcript),'protocol':str(target),'title':title,
         'created':created,'session':str(session)}
@@ -19,6 +27,9 @@ def finalize(handoff,draft,linker):
     if digest(data['transcript'])!=data['source_sha256']:raise RuntimeError('Transcript changed; prepare a fresh summary handoff.')
     body=Path(draft).read_text('utf-8').strip()
     if not body:raise ValueError('Empty summary; existing note retained.')
+    from transcript_links import link_timestamps
+    transcript=Path(data['transcript'])
+    body=link_timestamps(body,transcript.read_text('utf-8'),transcript.name)
     note=Path(data['protocol']);note.parent.mkdir(parents=True,exist_ok=True)
     header='# '+data['title']+'\n\nДата: '+data['created']+'\n\n'
     if data['provider'] == 'local': header += 'Резюме: local\n\n'

@@ -28,6 +28,11 @@ class Modes(unittest.TestCase):
         run.assert_called_once()
         self.assertEqual(data['state'],'complete')
         self.assertIn('Резюме: local',Path(data['protocol']).read_text('utf-8'))
+    def test_local_minutes_uses_bundled_code_without_product_checkout(self):
+        config={k:v for k,v in secretary.CONFIG.items() if k!='minutes_product'}
+        with patch.object(secretary,'CONFIG',config),patch.object(lm,'build_minutes',return_value=('LOCAL',{})) as build,patch.object(secretary,'api'),patch.object(secretary,'output'):
+            self.assertEqual(secretary.minutes('synthetic transcript'),'LOCAL')
+        self.assertEqual(build.call_args.args[0],'synthetic transcript')
     def test_finalize_backup_and_bold_names(self):
         path,data=self.prep()
         note=Path(data['protocol']);note.write_text('OLD','utf-8')

@@ -13,7 +13,7 @@ def next_deadline(elapsed, first=3600, interval=1800):
     return first + (int((elapsed - first) // interval) + 1) * interval
 
 
-def notify_windows(message):
+def notify_windows(message, title='Dion Secretary'):
     """Submit a native tray notification without launching a shell or recording audio."""
     import ctypes
     from ctypes import wintypes as w
@@ -56,7 +56,7 @@ def notify_windows(message):
             raise OSError('Windows rejected recording notification icon')
         added = True
         notice.uFlags = 16  # NIF_INFO
-        notice.szInfoTitle = 'Dion Secretary'
+        notice.szInfoTitle = title[:63]
         notice.szInfo = message if len(message) <= 255 else message[:252] + '...'
         notice.dwInfoFlags, notice.uTimeout = 1, 10000
         if not shell.Shell_NotifyIconW(1, ctypes.byref(notice)):
@@ -115,14 +115,17 @@ class RecordingReminders:
             due = next_deadline(time.monotonic() - self.started, self.first, self.interval)
 
 
-def launch_stop_notification(session, message):
-    """Detached notifier so WAV finalization and stop() never wait for the desktop UI."""
+def launch_notification(session, message, *, title, result_name, prominent=False):
+    """Detached advisory notifier; never changes recording state."""
     import subprocess
     import sys
     session = Path(session)
-    with (session / 'stop-notification.log').open('ab') as log:
+    if Path(result_name).name != result_name:
+        raise ValueError('Notification result must be a filename')
+    with (session / 'notifications.log').open('ab') as log:
         subprocess.Popen([sys.executable, '-X', 'utf8', '-B', str(Path(__file__).resolve()),
-                          '--message', message, '--result', str(session / 'stop-notification.json')],
+                          '--message', message, '--title', title, '--result', str(session / result_name)]
+                         + (['--prominent'] if prominent else []),
                          stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                          creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
 
@@ -131,11 +134,26 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--message', required=True)
+    parser.add_argument('--title', default='Запись завершена')
     parser.add_argument('--result', required=True)
+    parser.add_argument('--prominent', action='store_true')
     args = parser.parse_args()
     try:
-        notify_windows(args.message)
-        result = {'state': 'submitted_to_windows', 'message': args.message}
+        if args.prominent:
+            import ctypes
+            from ctypes import wintypes as w
+            user = ctypes.WinDLL('user32', use_last_error=True)
+            user.MessageBoxW.argtypes = [w.HWND, w.LPCWSTR, w.LPCWSTR, w.UINT]
+            user.MessageBoxW.restype = ctypes.c_int
+            user.MessageBeep(0x40)
+            # Topmost foreground dialog persists until acknowledged; detached from recorder.
+            if not user.MessageBoxW(None, args.message, args.title, 0x40000 | 0x10000 | 0x40):
+                raise ctypes.WinError(ctypes.get_last_error())
+            state = 'acknowledged'
+        else:
+            notify_windows(args.message, args.title)
+            state = 'submitted_to_windows'
+        result = {'state': state, 'title': args.title, 'message': args.message}
     except Exception as exc:
         result = {'state': 'error', 'error': str(exc), 'message': args.message}
     Path(args.result).write_text(json.dumps(result, ensure_ascii=False, indent=2), 'utf-8')

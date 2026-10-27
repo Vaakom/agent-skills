@@ -42,11 +42,17 @@ class PortabilityTests(unittest.TestCase):
             self.assertNotIn('minutes_product', data)
 
     def test_configured_journal_root_is_used_before_capture(self):
-        with patch.object(secretary, 'ACTIVE', Path(tempfile.gettempdir()) / 'nonexistent-skills-active.json'), \
-             patch.object(secretary, 'live_journals', return_value={'meetings': []}) as journals:
-            with self.assertRaises(RuntimeError):
-                secretary.start(SimpleNamespace(meeting_journal=None))
-            self.assertEqual(journals.call_args.kwargs['root'], secretary.JOURNAL_ROOT)
+        # Inspect journal routing, then stop before any physical audio lookup.
+        with tempfile.TemporaryDirectory() as folder:
+            journal_root = str(Path(folder) / 'journals')
+            with patch.dict(secretary.CONFIG, {'journal_root': journal_root}), \
+                 patch.object(secretary, 'ACTIVE', Path(folder) / 'active.json'), \
+                 patch.object(auto_journals, 'live_journals', return_value={'meetings': []}) as journals, \
+                 patch.object(secretary, 'devices', side_effect=RuntimeError('synthetic capture boundary')) as devices:
+                with self.assertRaisesRegex(RuntimeError, 'synthetic capture boundary'):
+                    secretary.start(SimpleNamespace(meeting_journal=None))
+                journals.assert_called_once_with(root=journal_root)
+                devices.assert_called_once_with()
 
     def test_local_pipeline_runs_without_a_products_directory(self):
         with tempfile.TemporaryDirectory() as folder:

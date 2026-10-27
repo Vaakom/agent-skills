@@ -12,11 +12,13 @@ import threading
 import time
 import urllib.request
 import wave
-from auto_journals import live_journals, DEFAULT_ROOT
+sys.dont_write_bytecode = True
+os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+import auto_journals
 
-CONFIG_PATH = Path(os.environ.get('DION_SECRETARY_CONFIG', str(Path(__file__).resolve().parents[1] / 'config.json')))
+CONFIG_PATH = Path(os.environ.get('DION_SECRETARY_CONFIG', str(Path(__file__).resolve().parents[1] / 'config.json'))).expanduser().resolve()
 if not CONFIG_PATH.is_file():
-    raise RuntimeError('Dion is not configured. Run configure.py or set DION_SECRETARY_CONFIG; see README.md.')
+    raise RuntimeError('Dion is not configured. Run configure.py or set DION_SECRETARY_CONFIG; see references/setup.md.')
 CONFIG = json.loads(CONFIG_PATH.read_text('utf-8-sig'))
 ROOT = Path(CONFIG['runtime'])
 ROOT.mkdir(parents=True, exist_ok=True)
@@ -28,7 +30,10 @@ for key, suffix in [('HF_HOME', 'huggingface'), ('HF_XET_CACHE', 'huggingface/xe
     os.environ[key] = str(DOWNLOADS / 'Cache' / suffix)
 os.environ['TEMP'] = os.environ['TMP'] = str(DOWNLOADS / 'Cache')
 ACTIVE = ROOT / 'active.json'
-JOURNAL_ROOT = Path(CONFIG.get('journal_root', str(DEFAULT_ROOT)))
+
+
+def live_journals():
+    return auto_journals.live_journals(root=CONFIG.get('journal_root', auto_journals.DEFAULT_ROOT))
 
 
 def write_json(path, value):
@@ -84,7 +89,11 @@ def start(args):
         if alive(current['pid']):
             raise RuntimeError('Recording already active. Use status or stop.')
     from meeting_autostop import select_binding
-    binding = select_binding(live_journals(root=JOURNAL_ROOT), getattr(args, 'meeting_journal', None))
+    binding, journal_issue = None, None
+    try:
+        binding = select_binding(live_journals(), getattr(args, 'meeting_journal', None))
+    except (OSError, ValueError, KeyError, RuntimeError) as exc:
+        journal_issue = str(exc)
     # Resolve audio devices before creating the worker; never silently choose unrelated devices.
     available = devices()
     mic = args.mic if args.mic is not None else next((d['index'] for d in available if d['default_mic']), None)
@@ -100,8 +109,8 @@ def start(args):
     session.mkdir(parents=True)
     write_json(session / 'meta.json', {'title': args.title, 'created': dt.datetime.now().isoformat(),
                'speaker': selected[speaker], 'mic': None if args.no_mic else selected[mic],
-               'auto_stop_binding': binding})
-    cmd = [sys.executable, str(Path(__file__).resolve()), '_record', '--session', str(session), '--speaker', str(speaker)]
+               'meeting_watch_binding': binding, 'journal_issue': journal_issue})
+    cmd = [sys.executable, '-B', str(Path(__file__).resolve()), '_record', '--session', str(session), '--speaker', str(speaker)]
     cmd += ['--no-mic'] if args.no_mic else ['--mic', str(mic)]
     with (session / 'worker.log').open('wb') as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -112,7 +121,7 @@ def start(args):
             if state.get('error'):
                 raise RuntimeError(state['error'])
             if state.get('state') == 'recording':
-                output({'session': str(session), 'pid': proc.pid, 'name_journals': live_journals(root=JOURNAL_ROOT), **state})
+                output({'session': str(session), 'pid': proc.pid, 'name_journals': live_journals(), **state})
                 return
         if proc.poll() is not None:
             raise RuntimeError((session / 'worker.log').read_text('utf-8', errors='replace'))
@@ -131,7 +140,6 @@ def record(args):
     audio_clocks = {}
     lock = threading.Lock()
     reminders = None
-    stop_reason = 'manual_stop'
     try:
         with pa.PyAudio() as p:
             tracks = [('remote', args.speaker)] + ([] if args.no_mic else [('microphone', args.mic)])
@@ -167,22 +175,56 @@ def record(args):
             title = json.loads((session / 'meta.json').read_text('utf-8'))['title']
             reminders = RecordingReminders(session, title, start_time)
             reminders.start()
-            from meeting_autostop import MeetingMonitor, REASONS
+            from meeting_autostop import MeetingMonitor, REASONS, AUTO_STOP_REASONS
             metadata = json.loads((session / 'meta.json').read_text('utf-8'))
-            monitor = MeetingMonitor(metadata['auto_stop_binding'])
+            binding = metadata.get('meeting_watch_binding', metadata.get('auto_stop_binding'))
+            try:
+                monitor = MeetingMonitor(binding)
+            except Exception as exc:
+                monitor = None
+                metadata['journal_issue'] = 'meeting monitor: ' + str(exc)
+            observations = set()
+            last_observation = None
+            automatic_reason = None
             while not (session / 'stop.flag').exists():
-                detected = monitor.poll()
-                if detected:
-                    stop_reason = detected
-                    (session / 'stop.flag').touch()
+                try:
+                    detected = monitor.poll() if monitor else None
+                except Exception as exc:
+                    # A monitor failure is not evidence of window/browser closure.
+                    detected = None
+                    if not any(item.startswith('meeting monitor:') for item in errors):
+                        errors.append('meeting monitor: ' + str(exc))
+                if detected in AUTO_STOP_REASONS:
+                    automatic_reason = detected
                     break
+                if detected and detected not in observations:
+                    observations.add(detected)
+                    from meeting_autostop import observation_message
+                    from recording_reminders import launch_notification
+                    try:
+                        current_title = json.loads((session / 'meta.json').read_text('utf-8'))['title']
+                    except (OSError, ValueError, KeyError):
+                        current_title = title
+                    last_observation = {'code': detected, 'at': dt.datetime.now().isoformat(),
+                                        'message': observation_message(current_title, detected)}
+                    try:
+                        with (session / 'meeting-observations.jsonl').open('a', encoding='utf-8') as log:
+                            log.write(json.dumps(last_observation, ensure_ascii=False) + '\n')
+                        launch_notification(session, last_observation['message'], title='Возможно, встреча завершилась',
+                                            result_name='meeting-observation-' + str(len(observations)) + '.json')
+                    except Exception as exc:
+                        errors.append('meeting notification: ' + str(exc))
                 if not all(s.is_active() for s in streams):
                     raise RuntimeError('An audio stream stopped unexpectedly; recordings retained.')
                 with lock:
                     state = {'state': 'recording', 'seconds': round(time.monotonic() - start_time, 1),
                              'levels': dict(levels), 'warnings': errors[-10:],
-                             'auto_stop': {'state': 'watching', 'tab': metadata['auto_stop_binding']['tab'],
-                                           'browser_watch_available': monitor.browser_seen}}
+                             'automatic_stop_enabled': monitor is not None,
+                             'automatic_stop_reasons': (sorted(AUTO_STOP_REASONS) if binding else ['browser_closed']) if monitor else [],
+                             'meeting_watch': {'state': ('watching' if binding else 'browser_only') if monitor else 'unavailable',
+                                               'tab': binding['tab'] if binding else None,
+                                               'journal_issue': metadata.get('journal_issue'),
+                                               'last_observation': last_observation}}
                 write_json(session / 'status.json', state)
                 time.sleep(.5)
             for stream in streams:
@@ -193,17 +235,27 @@ def record(args):
         files.clear()
         if reminders is not None:
             reminders.close()
-        reason = {'code': stop_reason, 'message': REASONS[stop_reason],
-                  'automatic': stop_reason != 'manual_stop', 'at': dt.datetime.now().isoformat()}
+        code = automatic_reason or 'manual_stop'
+        reason = {'code': code, 'message': REASONS[code],
+                  'automatic': automatic_reason is not None, 'at': dt.datetime.now().isoformat()}
         write_json(session / 'stop-reason.json', reason)
         write_json(session / 'status.json', {'state': 'stopped', 'seconds': round(time.monotonic() - start_time, 1),
-                                            'warnings': errors[-10:], 'stop_reason': reason})
-        if reason['automatic']:
-            from recording_reminders import launch_stop_notification
+                                            'warnings': errors[-10:], 'stop_reason': reason,
+                                            'automatic_stop_enabled': monitor is not None,
+                                            'automatic_stop_reasons': (sorted(AUTO_STOP_REASONS) if binding else ['browser_closed']) if monitor else []})
+        if automatic_reason:
+            from meeting_autostop import completion_message
+            from recording_reminders import launch_notification
             try:
-                launch_stop_notification(session, f'Запись "{title}" завершена. {reason["message"]}.')
+                current_title = json.loads((session / 'meta.json').read_text('utf-8'))['title']
+            except (OSError, ValueError, KeyError):
+                current_title = title
+            try:
+                launch_notification(session, completion_message(current_title, code),
+                                    title='Запись встречи завершена',
+                                    result_name='meeting-completion.json', prominent=True)
             except Exception as exc:
-                write_json(session / 'stop-notification.json', {'state': 'error', 'error': str(exc)})
+                write_json(session / 'meeting-completion.json', {'state': 'error', 'error': str(exc)})
     except Exception as exc:
         for stream in streams:
             try: stream.close()
@@ -220,10 +272,10 @@ def record(args):
 
 def status():
     if not ACTIVE.exists():
-        return {'state': 'idle', 'name_journals': live_journals(root=JOURNAL_ROOT)}
+        return {'state': 'idle', 'name_journals': live_journals()}
     current = json.loads(ACTIVE.read_text('utf-8'))
     path = Path(current['session']) / 'status.json'
-    return {**current, 'name_journals': live_journals(root=JOURNAL_ROOT), 'worker_alive': alive(current['pid']), **(json.loads(path.read_text('utf-8')) if path.exists() else {})}
+    return {**current, 'name_journals': live_journals(), 'worker_alive': alive(current['pid']), **(json.loads(path.read_text('utf-8')) if path.exists() else {})}
 
 
 def stop():
@@ -372,9 +424,6 @@ def evidence_call(prompt, payload, schema):
 
 
 def minutes(text):
-    # Adjacent modules are the maintained source; configured legacy modules remain compatible.
-    if CONFIG.get('minutes_product'):
-        sys.path.insert(0, CONFIG['minutes_product'])
     from local_minutes import build_minutes
     try:
         markdown, report = build_minutes(text, evidence_call, CONFIG['minutes_model'], ROOT / 'per-fact-minutes')
@@ -452,7 +501,7 @@ def process(args):
         tracks = [(label, session / name) for label, name in [('Собеседники', 'remote.wav'), ('Я', 'microphone.wav')] if (session / name).exists()]
     if args.speaker_mode == 'browser' and not args.file:
         from auto_journals import prepare_journal
-        selection = prepare_journal(session, root=JOURNAL_ROOT, choice=args.meeting_journal)
+        selection = prepare_journal(session, root=CONFIG.get('journal_root', auto_journals.DEFAULT_ROOT), choice=args.meeting_journal)
         output({'browser_journal': selection})
     use_diarization = args.speaker_mode == 'voice' and CONFIG.get('diarization', {}).get('enabled', False) and not args.no_diarization
     if args.num_speakers is not None and args.num_speakers < 1:
@@ -509,6 +558,8 @@ def process(args):
     write_json(session / 'transcript.json', rows)
     text = '\n'.join(f"[{timestamp(r['start'])}] {r['speaker']}: {r['text']}" for r in rows)
     markdown_text = '\n'.join(f"[{timestamp(r['start'])}] **{r['speaker']}**: {r['text'].replace('***', r'\*\*\*')}" for r in rows)
+    from transcript_links import anchor_transcript
+    markdown_text = anchor_transcript(markdown_text).rstrip()
     (session / 'transcript.md').write_text('# Стенограмма\n\n' + markdown_text, 'utf-8')
     slug = session.name
     note_dir = Path(CONFIG['notes']); note_dir.mkdir(parents=True, exist_ok=True)
@@ -524,7 +575,8 @@ def process(args):
 def speech_ready():
     if CONFIG.get('speech_engine','whisper') == 'gigaam-v3':
         cfg=CONFIG['gigaam']; folder=Path(cfg['model_root'])/'huggingface-e2e-rnnt'
-        return Path(cfg['python']).is_file() and Path(cfg.get('worker') or Path(__file__).with_name('gigaam_worker.py')).is_file() and all((folder/name).is_file() for name in ['config.json','tokenizer.model','pytorch_model.bin','provenance.json'])
+        worker=Path(cfg.get('worker') or Path(__file__).with_name('gigaam_worker.py'))
+        return Path(cfg['python']).is_file() and worker.is_file() and all((folder/name).is_file() for name in ['config.json','tokenizer.model','pytorch_model.bin','provenance.json'])
     return (model_path()/'model.bin').is_file()
 
 
