@@ -9,6 +9,7 @@
 !/dion-secretary/
 !/mesh-homework/
 !/youtube-library/
+!/local-permissions/
 
 # Machine configuration and historical local instructions.
 **/config.json

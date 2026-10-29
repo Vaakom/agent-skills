@@ -7,6 +7,7 @@
 | [Dion Secretary](dion-secretary/SKILL.md) | Записывает встречи, расшифровывает локально, готовит протокол с ассистентом или локальной моделью | Windows, Python 3.12+, аудиоустройства; для записи Dion Speaker Helper |
 | [MESH Homework](mesh-homework/SKILL.md) | Собирает задания МЭШ за неделю и сохраняет Markdown | Браузерный инструмент, доступ к дневнику, Python; Windows для необязательного хранилища паролей |
 | [YouTube Library](youtube-library/SKILL.md) | Импортирует свои плейлисты и лайки через YouTube API или Takeout | Python 3.12+; Windows для OAuth/DPAPI; Ollama для локальной классификации |
+| [Local Permissions](local-permissions/SKILL.md) | Выполняет уже разрешённые локальные операции через фиксированные submit.py и run.py | Существующая Windows-инсталляция products/local-permissions и её правила; код запускателя в репозиторий не входит |
 
 ## Установка
 
