@@ -40,3 +40,7 @@ flowchart TB
 Источник: [SKILL.md](SKILL.md). Схема сверена с инструкцией 2026-10-27.
 - Выходные каталоги задаются параметрами sessions и notes. Настройки компьютера находятся в исключённых из Git config.json и references/local.md.
 - GigaAM-v3 использует gigaam_worker.py, Whisper — faster-whisper. Движок задаётся настройками; автоматического переключения нет.
+
+Configuration: `secretary.py` loads the explicit `DION_SECRETARY_CONFIG` override or `%LOCALAPPDATA%/DionSecretary/config.json`, with legacy adjacent-file fallback. The recording workflow is unchanged.
+
+Recording startup: `secretary.py start` checks the WASAPI loopback first. A missing or failed microphone leaves the remote WAV recording active, marks `microphone=unavailable` in status, and requests a Windows notification. If startup fails entirely, `start_with_alert` requests a persistent Windows dialog; the CLI still returns an error. These branches are covered by synthetic tests, without live audio capture.

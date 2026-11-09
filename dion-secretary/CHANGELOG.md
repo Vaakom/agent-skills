@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.5 - 2026-11-10
+
+- Keep recording remote audio when the microphone is absent or fails to open; expose the limitation in status and a Windows notification.
+- Request a persistent Windows alert when recording startup fails, while preserving the command error.
+- Add synthetic checks for microphone fallback and startup alert routing; no live meeting was captured.
+
+## 2.1.4 - 2026-10-30
+
+- Prefer machine-local configuration outside the synchronized vault; retain explicit override and legacy fallback.
+
+
 ## 2.1.3 - 2026-10-27
 
 - Validation: 67 portable synthetic skill tests and 11 synthetic recorder integration tests passed; static skill audit passed. No live capture, real speech recognition, meeting UI or notification delivery was tested.

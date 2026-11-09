@@ -2,14 +2,14 @@
 name: dion-secretary
 description: Record Dion meetings on Windows, transcribe locally and prepare Russian minutes with Codex by default or a local model on explicit request. Use for recording, stopping and processing Dion meeting recordings.
 metadata:
-  version: "2.1.3"
+  version: "2.1.5"
 ---
 
 # Dion secretary
 
 ## Configuration
 
-Use `scripts/secretary.py` with the configured Python environment. Read `references/local.md` if it exists: it contains this computer's verified paths and preferences and is excluded from Git. Load adjacent `config.json`, or the file named by `DION_SECRETARY_CONFIG`. Follow [setup.md](references/setup.md) for a new installation. Do not reuse another computer's paths or change the selected speech engine, device, model or output folder without a reason established by the request.
+Use `scripts/secretary.py` with the configured Python environment. Read `references/local.md` if it exists: it contains this computer's verified paths and preferences and is excluded from Git. Load `%LOCALAPPDATA%/DionSecretary/config.json` first, or the file named by `DION_SECRETARY_CONFIG`. Adjacent `config.json` is a legacy fallback for installations not yet migrated. Machine settings must remain outside the synchronized vault. Follow [setup.md](references/setup.md) for a new installation. Do not reuse another computer's paths or change the selected speech engine, device, model or output folder without a reason established by the request.
 
 Recordings, models, runtime and dependency environments stay outside the skill repository. Export notes only to the configured `notes` directory. Do not assume a particular vault or model installation exists.
 
@@ -18,7 +18,7 @@ Recordings, models, runtime and dependency environments stay outside the skill r
 A request such as «Пиши встречу <название>» authorizes starting the named recording; a quoted example, setup or status request does not. Check `status` and `devices` first. Never start a duplicate recording or capture live audio merely to test setup.
 
 - `devices`: list WASAPI input and loopback devices. Match the actual browser output and meeting microphone; Bluetooth meeting profiles may differ.
-- `start --title "Meeting title"`: capture separate system-output and microphone WAVs. Use `--speaker INDEX --mic INDEX` when needed. `--no-mic` requires a request for remote audio alone.
+- `start --title "Meeting title"`: capture separate system-output and microphone WAVs. Use `--speaker INDEX --mic INDEX` when needed. If the microphone is missing or fails to open, continue recording system output, report the missing track in chat and submit a Windows notification. `--no-mic` explicitly disables microphone capture.
 - `status`: check worker state, duration, levels and errors without reading speech.
 - `stop`: stop gracefully, close both WAVs and preserve sources. Do not terminate unrelated processes.
 
@@ -31,6 +31,8 @@ Stop automatically only when the bound meeting window closes or all Chrome windo
 Close both WAV tracks and save stop-reason.json before launching the detached prominent Windows completion dialog. It requests a system sound and remains until acknowledged. Notification failures do not invalidate saved audio. Delivery is retained in meeting-completion.json; advisory evidence in meeting-observations.jsonl. Separate reminders request desktop notifications at 60 minutes and every 30 minutes afterwards; missed intervals are skipped. Windows settings may suppress display. These are not chat messages. Automatic stop does not start transcription.
 
 Immediately report failed stages, timeouts and unexpected worker exit before diagnosing or retrying. If start failed, explicitly say «Запись не началась». Check actual audio duration and worker state: a WAV header alone is not captured audio. Preserve partial sources. Distinguish recorded audio, completed transcription and completed minutes. Do not promise chat monitoring after the turn ends.
+
+An unsuccessful `start` also requests a detached, persistent Windows alert with the failure reason. Alert delivery is separate from the recording result; if Windows cannot show it, report that limitation in chat. A microphone failure alone is not a failed start when the remote track records successfully.
 
 ## Transcription and speaker evidence
 

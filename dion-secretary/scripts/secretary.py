@@ -16,7 +16,9 @@ sys.dont_write_bytecode = True
 os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 import auto_journals
 
-CONFIG_PATH = Path(os.environ.get('DION_SECRETARY_CONFIG', str(Path(__file__).resolve().parents[1] / 'config.json'))).expanduser().resolve()
+LOCAL_CONFIG = Path(os.environ.get('LOCALAPPDATA', str(Path.home() / '.local/share'))) / 'DionSecretary/config.json'
+DEFAULT_CONFIG = LOCAL_CONFIG if LOCAL_CONFIG.is_file() else Path(__file__).resolve().parents[1] / 'config.json'
+CONFIG_PATH = Path(os.environ.get('DION_SECRETARY_CONFIG', str(DEFAULT_CONFIG))).expanduser().resolve()
 if not CONFIG_PATH.is_file():
     raise RuntimeError('Dion is not configured. Run configure.py or set DION_SECRETARY_CONFIG; see references/setup.md.')
 CONFIG = json.loads(CONFIG_PATH.read_text('utf-8-sig'))
@@ -51,6 +53,33 @@ def write_json(path, value):
 
 def output(value):
     print(json.dumps(value, ensure_ascii=False, indent=2), flush=True)
+
+
+def alert_start_failure(title, error):
+    """Report an unsuccessful start in a detached, persistent Windows dialog."""
+    message = f'Запись встречи «{title}» не началась.\nПричина: {str(error)[:500]}'
+    try:
+        from recording_reminders import launch_notification
+        launch_notification(ROOT, message, title='Dion: запись не началась',
+                            result_name=f'recording-start-failure-{time.time_ns()}.json', prominent=True)
+    except Exception as exc:
+        print(f'ALERT ERROR: {exc}', file=sys.stderr, flush=True)
+
+
+def start_with_alert(args):
+    try:
+        start(args)
+    except Exception as exc:
+        alert_start_failure(args.title, exc)
+        raise
+
+
+def notify_microphone_issue(session, message, result_name):
+    try:
+        from recording_reminders import launch_notification
+        launch_notification(session, message, title='Dion: микрофон недоступен', result_name=result_name)
+    except Exception as exc:
+        print(f'MICROPHONE ALERT ERROR: {exc}', file=sys.stderr, flush=True)
 
 
 def alive(pid):
@@ -97,19 +126,22 @@ def start(args):
     # Resolve audio devices before creating the worker; never silently choose unrelated devices.
     available = devices()
     mic = args.mic if args.mic is not None else next((d['index'] for d in available if d['default_mic']), None)
-    speaker = args.speaker if args.speaker is not None else next(d['index'] for d in available if d['default_output'])
+    speaker = args.speaker if args.speaker is not None else next((d['index'] for d in available if d['default_output']), None)
     selected = {d['index']: d for d in available}
     if speaker not in selected or not selected[speaker]['loopback']:
         raise RuntimeError('Speaker index must be a WASAPI loopback device.')
+    mic_warning = None
     if not args.no_mic and (mic not in selected or selected[mic]['loopback']):
-        raise RuntimeError('Microphone index must be a WASAPI microphone.')
+        mic_warning = 'Microphone unavailable; recording remote audio only.'
+        args.no_mic = True
     stamp = dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     slug = re.sub(r'[^\w -]', '', args.title, flags=re.UNICODE).strip()[:70] or 'Dion'
     session = SESSIONS / (stamp + '_' + slug)
     session.mkdir(parents=True)
     write_json(session / 'meta.json', {'title': args.title, 'created': dt.datetime.now().isoformat(),
                'speaker': selected[speaker], 'mic': None if args.no_mic else selected[mic],
-               'meeting_watch_binding': binding, 'journal_issue': journal_issue})
+               'meeting_watch_binding': binding, 'journal_issue': journal_issue,
+               'microphone_warning': mic_warning})
     cmd = [sys.executable, '-B', str(Path(__file__).resolve()), '_record', '--session', str(session), '--speaker', str(speaker)]
     cmd += ['--no-mic'] if args.no_mic else ['--mic', str(mic)]
     with (session / 'worker.log').open('wb') as log:
@@ -135,7 +167,7 @@ def record(args):
     import pyaudiowpatch as pa
     session = Path(args.session)
     start_time = time.monotonic()
-    streams, files = [], []
+    streams, files = {}, {}
     levels, errors = {}, []
     audio_clocks = {}
     lock = threading.Lock()
@@ -143,34 +175,55 @@ def record(args):
     try:
         with pa.PyAudio() as p:
             tracks = [('remote', args.speaker)] + ([] if args.no_mic else [('microphone', args.mic)])
+            mic_warning = json.loads((session / 'meta.json').read_text('utf-8')).get('microphone_warning')
+            if mic_warning:
+                errors.append(mic_warning)
             for label, index in tracks:
-                device = p.get_device_info_by_index(index)
-                channels, rate = int(device['maxInputChannels']), int(device['defaultSampleRate'])
-                wav = wave.open(str(session / (label + '.wav')), 'wb')
-                wav.setnchannels(channels); wav.setsampwidth(2); wav.setframerate(rate)
-                files.append(wav)
+                wav = None
+                try:
+                    device = p.get_device_info_by_index(index)
+                    channels, rate = int(device['maxInputChannels']), int(device['defaultSampleRate'])
+                    wav = wave.open(str(session / (label + '.wav')), 'wb')
+                    wav.setnchannels(channels); wav.setsampwidth(2); wav.setframerate(rate)
 
-                def callback(data, count, timing, flags, label=label, wav=wav, rate=rate):
+                    def callback(data, count, timing, flags, label=label, wav=wav, rate=rate):
+                        try:
+                            with lock:
+                                if label not in audio_clocks:
+                                    audio_clocks[label] = time.monotonic() - count / rate
+                                    write_json(session / 'recording_clock.json',
+                                               {k + '_monotonic': v for k, v in audio_clocks.items()})
+                            wav.writeframesraw(data)
+                            samples = np.frombuffer(data, dtype=np.int16).astype(np.float32)
+                            with lock:
+                                levels[label] = round(float(np.sqrt(np.mean(samples ** 2))) / 32768, 4) if len(samples) else 0
+                                if flags:
+                                    errors.append(f'{label}: audio status flag {flags}')
+                            return None, pa.paContinue
+                        except Exception as exc:
+                            with lock:
+                                errors.append(f'{label}: {exc}')
+                            return None, pa.paAbort
+
+                    streams[label] = p.open(format=pa.paInt16, channels=channels, rate=rate, input=True,
+                                            input_device_index=index, frames_per_buffer=2048, stream_callback=callback)
+                    files[label] = wav
+                except Exception as exc:
+                    if wav is not None:
+                        try: wav.close()
+                        except Exception: pass
+                    if label == 'remote':
+                        raise
+                    path = session / 'microphone.wav'
                     try:
-                        with lock:
-                            if label not in audio_clocks:
-                                audio_clocks[label] = time.monotonic() - count / rate
-                                write_json(session / 'recording_clock.json',
-                                           {k + '_monotonic': v for k, v in audio_clocks.items()})
-                        wav.writeframesraw(data)
-                        samples = np.frombuffer(data, dtype=np.int16).astype(np.float32)
-                        with lock:
-                            levels[label] = round(float(np.sqrt(np.mean(samples ** 2))) / 32768, 4) if len(samples) else 0
-                            if flags:
-                                errors.append(f'{label}: audio status flag {flags}')
-                        return None, pa.paContinue
-                    except Exception as exc:
-                        with lock:
-                            errors.append(f'{label}: {exc}')
-                        return None, pa.paAbort
-
-                streams.append(p.open(format=pa.paInt16, channels=channels, rate=rate, input=True,
-                                      input_device_index=index, frames_per_buffer=2048, stream_callback=callback))
+                        if path.exists() and path.stat().st_size <= 44:
+                            path.unlink()
+                    except OSError:
+                        pass
+                    mic_warning = f'Microphone unavailable; recording remote audio only: {exc}'
+                    errors.append(mic_warning)
+            if mic_warning:
+                notify_microphone_issue(session, mic_warning, 'microphone-warning.json')
             from recording_reminders import RecordingReminders
             title = json.loads((session / 'meta.json').read_text('utf-8'))['title']
             reminders = RecordingReminders(session, title, start_time)
@@ -214,11 +267,28 @@ def record(args):
                                             result_name='meeting-observation-' + str(len(observations)) + '.json')
                     except Exception as exc:
                         errors.append('meeting notification: ' + str(exc))
-                if not all(s.is_active() for s in streams):
-                    raise RuntimeError('An audio stream stopped unexpectedly; recordings retained.')
+                if not streams['remote'].is_active():
+                    raise RuntimeError('Remote audio stream stopped unexpectedly; recordings retained.')
+                if 'microphone' in streams and not streams['microphone'].is_active():
+                    try: streams['microphone'].close()
+                    except Exception: pass
+                    del streams['microphone']
+                    try: files['microphone'].close()
+                    except Exception: pass
+                    del files['microphone']
+                    microphone_path = session / 'microphone.wav'
+                    try:
+                        if microphone_path.stat().st_size <= 44:
+                            microphone_path.unlink()
+                    except OSError:
+                        pass
+                    mic_warning = 'Microphone stream stopped; remote audio recording continues.'
+                    errors.append(mic_warning)
+                    notify_microphone_issue(session, mic_warning, 'microphone-stream-warning.json')
                 with lock:
                     state = {'state': 'recording', 'seconds': round(time.monotonic() - start_time, 1),
                              'levels': dict(levels), 'warnings': errors[-10:],
+                             'microphone': 'unavailable' if mic_warning else ('disabled' if args.no_mic else 'recording'),
                              'automatic_stop_enabled': monitor is not None,
                              'automatic_stop_reasons': (sorted(AUTO_STOP_REASONS) if binding else ['browser_closed']) if monitor else [],
                              'meeting_watch': {'state': ('watching' if binding else 'browser_only') if monitor else 'unavailable',
@@ -227,10 +297,10 @@ def record(args):
                                                'last_observation': last_observation}}
                 write_json(session / 'status.json', state)
                 time.sleep(.5)
-            for stream in streams:
+            for stream in streams.values():
                 stream.stop_stream(); stream.close()
             streams.clear()
-        for wav in files:
+        for wav in files.values():
             wav.close()
         files.clear()
         if reminders is not None:
@@ -241,6 +311,7 @@ def record(args):
         write_json(session / 'stop-reason.json', reason)
         write_json(session / 'status.json', {'state': 'stopped', 'seconds': round(time.monotonic() - start_time, 1),
                                             'warnings': errors[-10:], 'stop_reason': reason,
+                                            'microphone': 'unavailable' if mic_warning else ('disabled' if args.no_mic else 'recording'),
                                             'automatic_stop_enabled': monitor is not None,
                                             'automatic_stop_reasons': (sorted(AUTO_STOP_REASONS) if binding else ['browser_closed']) if monitor else []})
         if automatic_reason:
@@ -257,10 +328,10 @@ def record(args):
             except Exception as exc:
                 write_json(session / 'meeting-completion.json', {'state': 'error', 'error': str(exc)})
     except Exception as exc:
-        for stream in streams:
+        for stream in streams.values():
             try: stream.close()
             except Exception: pass
-        for wav in files:
+        for wav in files.values():
             try: wav.close()
             except Exception: pass
         write_json(session / 'status.json', {'state': 'error', 'error': str(exc)})
@@ -647,7 +718,7 @@ def main():
         CONFIG['minutes_model'] = args.minutes_model
         args.minutes_provider = 'local'
     if args.command == 'devices': output(devices())
-    elif args.command == 'start': start(args)
+    elif args.command == 'start': start_with_alert(args)
     elif args.command == '_record': record(args)
     elif args.command == 'stop': stop()
     elif args.command == 'status': output(status())

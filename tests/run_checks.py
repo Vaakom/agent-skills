@@ -50,7 +50,7 @@ def main():
         suite = unittest.TestSuite()
         loader = unittest.TestLoader()
         for name in ('test_diarization', 'test_evidence_minutes', 'test_meeting_links',
-                     'test_recording_reminders', 'test_minutes_modes', 'test_transcript_links', 'test_youtube_library',
+                     'test_recording_reminders', 'test_recording_start', 'test_minutes_modes', 'test_transcript_links', 'test_youtube_library',
                      'test_classifier_runtime',
                      'test_portability', 'test_homework', 'test_gigaam_bundle'):
             suite.addTests(loader.loadTestsFromModule(importlib.import_module(name)))
