@@ -17,7 +17,7 @@ def no_network(*args, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path(os.environ.get(
-        'DION_SECRETARY_CONFIG', str(Path(__file__).resolve().parents[1] / 'config.json'))))
+        'DION_SECRETARY_CONFIG', str(Path(os.environ.get('LOCALAPPDATA', str(Path.home() / '.local/share'))) / 'DionSecretary/config.json'))))
     args = parser.parse_args()
     config = json.loads(args.config.read_text('utf-8-sig'))
     section = config['gigaam']

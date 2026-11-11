@@ -1,11 +1,11 @@
 ---
 name: local-permissions
-description: Run already authorized local operations through the installed Windows allowlisted dispatcher for Dion recording, read-only mail, document opening and audits. Use alongside the relevant task skill when these operations require the fixed submit.py and run.py workflow; does not grant permissions or install the dispatcher.
+description: Run authorized local operations through the installed Windows dispatcher only when the user explicitly asks to use local-permissions. Covers Dion, read-only mail, document opening, tests, diagnostics, public link checks and GitHub status; does not grant permissions or install the dispatcher.
 ---
 
 # Local permissions
 
-Используй установленный локальный запускатель для уже разрешённых операций. Скилл описывает транспорт задания; правила записи встречи, чтения почты и выбора проверок остаются в соответствующем скилле или инструкции инструмента.
+Применяй этот скилл и установленный локальный запускатель только по прямому указанию пользователя использовать `local-permissions`. Скилл описывает транспорт задания; правила записи встречи, чтения почты и выбора проверок остаются в соответствующем скилле или инструкции инструмента.
 
 ## Зависимость и границы
 
@@ -36,6 +36,10 @@ description: Run already authorized local operations through the installed Windo
 Не заменяй submit одноразовым `python -c`, shell-конвейером или ручной записью request.json. Если среда запросила техническое подтверждение, используй штатный механизм и действующие правила уведомления/журналирования. Сохранённое правило не гарантирует автоматическое одобрение в новом сеансе или на другом компьютере.
 
 ## Сбои и проверка результата
+
+Повторяющиеся проверки запускай через операции tests/diagnostic/github/link из [references/requests.md](references/requests.md), а не одноразовые shell-команды. Они не изменяют аккаунты и настройки; выбирай только относящуюся к задаче проверку. Для GitHub разрешены только состояние входа, refs и CI трёх известных репозиториев; push сюда не входит. Не передавай URL с секретами в link.
+
+Для команды «Открой правила доступа» используй `{"operation":"rules","action":"open","name":"local"}` (по умолчанию local); для сохранённых одобрений — name=default. Запускатель открывает только два фиксированных файла текущего пользователя в Блокноте, не копирует и не публикует их. Это отдельная операция, а не расширение общего open на внешние пути.
 
 - При отказе валидации исправь только неверные поля, сверившись с текущей схемой. Не обходи ограничения запускателя прямой командой.
 - При существующем задании, `processing.json` или `dispatch.lock` сначала выясни состояние собственного запуска. Не удаляй очередь и блокировки и не подавай повторно start, stop, export или open вслепую. После сбоя/тайм-аута проверь, не выполнилось ли действие, прежде чем повторять.

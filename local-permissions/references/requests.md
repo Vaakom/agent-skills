@@ -30,6 +30,15 @@ Search: необязательные `text`, `subject`, `sender`, `since`, `befo
 
 ## Открытие и аудит
 
+Отдельная команда для правил текущего пользователя:
+
+```json
+{"operation":"rules","action":"open","name":"local"}
+{"operation":"rules","action":"open","name":"default"}
+```
+
+Открывает в Блокноте только `~/.codex/rules/local-operations.rules` или `default.rules`. Произвольные пути, изменение и публикация правил не поддерживаются; файл должен существовать без перенаправления ссылкой.
+
 ```json
 {"operation":"open","target":"C:/AI/AI Native/meetings/Dion/NOTE.md","anchor":"^t-00-00-12"}
 {"operation":"open","target":"https://example.com/"}
@@ -39,3 +48,20 @@ Search: необязательные `text`, `subject`, `sender`, `since`, `befo
 Open принимает существующие документы разрешённых расширений внутри хранилища или `C:/AI/Large files/documents`, либо HTTP(S) URL без встроенных учётных данных. `anchor` — только Obsidian block ID для Markdown-заметки в хранилище. Private, скрытые пути, UNC, ADS и исполняемые файлы отвергаются.
 
 Audit check: `vault`, `skills-static`, `skills-tests`, `skills-full`. Статический, выбранный и полный режимы проверяют разные вещи; читай README соответствующего аудитора перед выбором.
+
+## Тесты и диагностика
+
+```json
+{"operation":"tests","suite":"permissions"}
+{"operation":"diagnostic","component":"dion"}
+{"operation":"diagnostic","component":"syncthing"}
+{"operation":"diagnostic","component":"archive"}
+{"operation":"github","action":"auth"}
+{"operation":"github","action":"refs","repo":"skills"}
+{"operation":"github","action":"ci","repo":"dion"}
+{"operation":"link","url":"https://github.com/Vaakom/local-permissions"}
+```
+
+Tests suite: permissions, dion-helper (только Python), archive, skill-health. Github repo: skills, dion, permissions — три известных репозитория; action только auth/refs/ci, без записи. Diagnostic: только локальные конфиги/метаданные Dion, GET status/ignores фиксированной папки Syncthing, status.json архиватора. Не выдавай совпадение конфигов за проверенный фактический ID Chrome, свежий файл за сохранённые имена, старый статус архиватора за живой процесс.
+
+Link проверяет публичный HTTP(S), включая каждый редирект; локальные IP, credentials в URL и нестандартные порты запрещены. Не передавай URL с секретами. Проверка не использует авторизацию браузера, поэтому при 403/антиботе попробуй другой разрешённый способ проверки страницы. Эти операции не ремонтируют конфигурацию, не запускают сервисы, не удаляют данные и не публикуют ничего.
