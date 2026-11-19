@@ -170,6 +170,9 @@ def record(args):
     streams, files = {}, {}
     levels, errors = {}, []
     audio_clocks = {}
+    from recording_health import AudioHealth, inspect_wavs, journal_diagnostic, inspect_journal, save_recording_summary
+    health = AudioHealth(start_time)
+    health_notified = set()
     lock = threading.Lock()
     reminders = None
     try:
@@ -185,6 +188,8 @@ def record(args):
                     channels, rate = int(device['maxInputChannels']), int(device['defaultSampleRate'])
                     wav = wave.open(str(session / (label + '.wav')), 'wb')
                     wav.setnchannels(channels); wav.setsampwidth(2); wav.setframerate(rate)
+                    with lock:
+                        health.register(label, rate, channels)
 
                     def callback(data, count, timing, flags, label=label, wav=wav, rate=rate):
                         try:
@@ -194,6 +199,8 @@ def record(args):
                                     write_json(session / 'recording_clock.json',
                                                {k + '_monotonic': v for k, v in audio_clocks.items()})
                             wav.writeframesraw(data)
+                            with lock:
+                                health.received(label, len(data), time.monotonic())
                             samples = np.frombuffer(data, dtype=np.int16).astype(np.float32)
                             with lock:
                                 levels[label] = round(float(np.sqrt(np.mean(samples ** 2))) / 32768, 4) if len(samples) else 0
@@ -220,6 +227,8 @@ def record(args):
                             path.unlink()
                     except OSError:
                         pass
+                    with lock:
+                        health.tracks.pop(label, None)
                     mic_warning = f'Microphone unavailable; recording remote audio only: {exc}'
                     errors.append(mic_warning)
             if mic_warning:
@@ -295,6 +304,20 @@ def record(args):
                                                'tab': binding['tab'] if binding else None,
                                                'journal_issue': metadata.get('journal_issue'),
                                                'last_observation': last_observation}}
+                    state['elapsed_seconds'] = state['seconds']
+                    state['audio_health'] = health.snapshot(time.monotonic())
+                for label, metrics in state['audio_health'].items():
+                    issue = metrics['state']
+                    if issue in ('no_data', 'stalled', 'duration_gap') and (label, issue) not in health_notified:
+                        health_notified.add((label, issue))
+                        message = f'{label}: {issue}; recorded {metrics["audio_seconds"]} seconds. Check audio capture.'
+                        errors.append(message)
+                        try:
+                            from recording_reminders import launch_notification
+                            launch_notification(session, message, title='Dion: audio capture warning',
+                                                result_name=f'audio-health-{label}-{issue}.json', prominent=True)
+                        except Exception as exc:
+                            errors.append('audio health notification: ' + str(exc))
                 write_json(session / 'status.json', state)
                 time.sleep(.5)
             for stream in streams.values():
@@ -305,11 +328,22 @@ def record(args):
         files.clear()
         if reminders is not None:
             reminders.close()
+        elapsed = time.monotonic() - start_time
+        with lock:
+            final_health = health.snapshot(time.monotonic())
+        report = inspect_wavs(session, elapsed, final_health)
+        report['microphone'] = 'unavailable' if mic_warning else ('disabled' if args.no_mic else 'requested')
+        report['journal'] = inspect_journal(session, CONFIG.get('journal_root', auto_journals.DEFAULT_ROOT), binding, time.time() - time.monotonic())
+        report['journal_issue'] = metadata.get('journal_issue')
+        write_json(session / 'recording-report.json', report)
+        summary = save_recording_summary(session, report)
         code = automatic_reason or 'manual_stop'
         reason = {'code': code, 'message': REASONS[code],
                   'automatic': automatic_reason is not None, 'at': dt.datetime.now().isoformat()}
         write_json(session / 'stop-reason.json', reason)
         write_json(session / 'status.json', {'state': 'stopped', 'seconds': round(time.monotonic() - start_time, 1),
+                                            'elapsed_seconds': round(elapsed, 1), 'audio_health': final_health,
+                                            'recording_report': report, 'recording_summary': summary,
                                             'warnings': errors[-10:], 'stop_reason': reason,
                                             'microphone': 'unavailable' if mic_warning else ('disabled' if args.no_mic else 'recording'),
                                             'automatic_stop_enabled': monitor is not None,
@@ -322,7 +356,7 @@ def record(args):
             except (OSError, ValueError, KeyError):
                 current_title = title
             try:
-                launch_notification(session, completion_message(current_title, code),
+                launch_notification(session, completion_message(current_title, code) + "\n\n" + summary,
                                     title='Запись встречи завершена',
                                     result_name='meeting-completion.json', prominent=True)
             except Exception as exc:
@@ -334,7 +368,14 @@ def record(args):
         for wav in files.values():
             try: wav.close()
             except Exception: pass
-        write_json(session / 'status.json', {'state': 'error', 'error': str(exc)})
+        try:
+            report = inspect_wavs(session, time.monotonic() - start_time, health.snapshot(time.monotonic()))
+            report.update(recording_error=str(exc), journal=journal_diagnostic(locals().get('binding')))
+            write_json(session / 'recording-report.json', report)
+            save_recording_summary(session, report)
+        except Exception:
+            report = None
+        write_json(session / 'status.json', {'state': 'error', 'error': str(exc), 'recording_report': report})
         raise
     finally:
         if reminders is not None:
@@ -652,11 +693,25 @@ def speech_ready():
 
 
 def doctor():
-    ensure_ollama()
-    names = [m['name'] for m in api('/api/tags')['models']]
-    output({'devices': devices(), 'speech_engine': CONFIG.get('speech_engine','whisper'), 'speech_model_ready': speech_ready(),
-            'minutes_model': CONFIG['minutes_model'], 'minutes_model_ready': CONFIG['minutes_model'] in names,
-            'minutes_models': names, 'recording': status()})
+    # Independent checks: a broken optional model must not hide audio/journal errors.
+    checks = {}
+    def check(name, operation):
+        try:
+            checks[name] = {'state': 'checked', 'result': operation()}
+        except Exception as exc:
+            checks[name] = {'state': 'unavailable', 'error': str(exc)}
+    check('audio_devices', devices)
+    check('speech_model', lambda: {'engine': CONFIG.get('speech_engine', 'whisper'), 'ready': speech_ready()})
+    check('journals', live_journals)
+    from installation_versions import versions_report
+    check('versions', lambda: versions_report(CONFIG, CONFIG.get('journal_root', auto_journals.DEFAULT_ROOT)))
+    check('recording', status)
+    if CONFIG.get('minutes_provider', 'codex') == 'local':
+        check('minutes_models', lambda: {'models': api('/api/tags', timeout=3)['models'],
+                                         'required': CONFIG['minutes_model']})
+    else:
+        checks['minutes_models'] = {'state': 'not_required', 'provider': 'codex'}
+    output({'config_path': str(CONFIG_PATH), 'checks': checks})
 
 
 def self_test(args):

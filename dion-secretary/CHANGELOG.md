@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.3.0 - 2026-11-19
+
+- Diagnose installed manifest versus fresh observed extension/host versions without treating files as proof of activation.
+- Save a human-readable recording summary and include it in stop status and automatic completion notifications.
+
+
+## 2.2.0 - 2026-11-19
+
+- Add per-track written-frame health, stale-buffer/duration-gap warnings and finalized WAV recording reports. Preserve elapsed-time compatibility and capture policy.
+- Isolate doctor checks and avoid starting an optional Ollama service.
+- Synthetic validation is recorded in the reliability report; no live audio capture.
+
+
 ## 2.1.5 - 2026-11-10
 
 - Keep recording remote audio when the microphone is absent or fails to open; expose the limitation in status and a Windows notification.

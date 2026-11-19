@@ -44,3 +44,7 @@ flowchart TB
 Configuration: `secretary.py` loads the explicit `DION_SECRETARY_CONFIG` override or `%LOCALAPPDATA%/DionSecretary/config.json`, with legacy adjacent-file fallback. The recording workflow is unchanged.
 
 Recording startup: `secretary.py start` checks the WASAPI loopback first. A missing or failed microphone leaves the remote WAV recording active, marks `microphone=unavailable` in status, and requests a Windows notification. If startup fails entirely, `start_with_alert` requests a persistent Windows dialog; the CLI still returns an error. These branches are covered by synthetic tests, without live audio capture.
+
+Recording health: secretary.py callbacks count written frames; recording_health.py detects missing buffers and duration gaps. Status exposes each track separately. After WAV finalization, recording-report.json inspects actual durations; journal binding and unknown name coverage are separate. doctor isolates readiness checks without starting services.
+
+Version diagnostics: installation_versions.py consumes fresh journal metadata. Stop: recording_health.py saves recording-summary.md; secretary.py returns it and appends it to automatic completion. Processing remains separate.

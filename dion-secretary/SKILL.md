@@ -2,7 +2,7 @@
 name: dion-secretary
 description: Record Dion meetings on Windows, transcribe locally and prepare Russian minutes with Codex by default or a local model on explicit request. Use for recording, stopping and processing Dion meeting recordings.
 metadata:
-  version: "2.1.5"
+  version: "2.3.0"
 ---
 
 # Dion secretary
@@ -65,7 +65,7 @@ New notes link to the latest earlier note with the exact same meeting title. Sim
 
 ## Checks and maintenance
 
-`doctor` checks audio devices, speech assets, recording and local Ollama; it may start the configured loopback server. Local Ollama must use `http://127.0.0.1:11435`. `setup-models` explicitly downloads configured Whisper/Ollama models; GigaAM uses the bundled `scripts/gigaam_worker.py` and `scripts/gigaam_loader.py`, with an external environment and model directory. `scripts/setup_gigaam.py` explicitly installs model assets; `scripts/verify_gigaam.py` checks the worker offline using synthetic silence. See [setup.md](references/setup.md). `self-test --audio SYNTHETIC_WAV` runs synthetic speech and local-summary checks; without audio it checks only local summary generation. Never record a live meeting to test setup.
+`doctor` checks audio devices, speech assets, journals and recording independently; it queries local Ollama only for local minutes and never starts it. Local Ollama must use `http://127.0.0.1:11435`. `setup-models` explicitly downloads configured Whisper/Ollama models; GigaAM uses the bundled `scripts/gigaam_worker.py` and `scripts/gigaam_loader.py`, with an external environment and model directory. `scripts/setup_gigaam.py` explicitly installs model assets; `scripts/verify_gigaam.py` checks the worker offline using synthetic silence. See [setup.md](references/setup.md). `self-test --audio SYNTHETIC_WAV` runs synthetic speech and local-summary checks; without audio it checks only local summary generation. Never record a live meeting to test setup.
 
 Install the pinned `scripts/requirements.txt` into an external environment. PyAV 16.1.0 is pinned because newer incompatible versions previously broke decoding. No remote summary fallback or unrelated networking/VPN/audio/security changes.
 
@@ -78,3 +78,11 @@ Transcript paragraphs receive stable unique Obsidian block anchors. The bundled 
 ## Workflow maintenance
 
 Review [WORKFLOW.md](WORKFLOW.md) whenever this skill changes. Update affected steps, branches, tools, commands, outputs and limitations in the same change. Otherwise verify that the diagram remains accurate. Keep it compact and label each action with its implementing tool.
+
+## Recording health (2.2)
+
+Status preserves seconds as worker elapsed time and adds elapsed_seconds and per-track audio_health (written frames, audio_seconds, expected duration and last-buffer age). No buffers for five seconds or a substantial duration gap requests one persistent warning per track/problem; silence containing PCM frames is healthy data. Warnings do not stop remote capture. After closing WAVs, recording-report.json checks actual headers and reports missing/short/unreadable tracks, microphone mode and journal binding. For a bound journal the report estimates observed intervals between adjacent samples at most 1.5 seconds apart, separately counting named-indicator intervals. Long gaps are never filled; this is not proof of identities. Unbound coverage stays unknown. doctor checks independent components without starting Ollama; local model checks are not required for Codex minutes.
+
+## Versions and user-facing recording result (2.3)
+
+Doctor versions compares the configured installed manifest with fresh journal metadata from executing extension/host. Unknown or stale evidence never proves activation; reload_required is asserted only for a known mismatch. After stop read recording_summary from status or recording-summary.md, report audio durations and limitations, and distinguish unconfirmed transcription/minutes. Automatic completion includes the same summary. Do not restart Chrome, reinstall the host or record audio just to obtain version evidence.

@@ -84,10 +84,31 @@ class StartTests(unittest.TestCase):
                 secretary.record(args)
             state = json.loads((session / 'status.json').read_text('utf-8'))
             self.assertEqual(state['state'], 'stopped')
+            report = json.loads((session / 'recording-report.json').read_text('utf-8'))
+            self.assertFalse(report['complete_remote'])
+            self.assertEqual(report['tracks']['remote']['state'], 'empty')
             self.assertEqual(state['microphone'], 'unavailable')
             self.assertTrue((session / 'remote.wav').is_file())
             self.assertFalse((session / 'microphone.wav').exists())
             notice.assert_called_once()
+
+    def test_doctor_isolates_failures_and_does_not_start_optional_service(self):
+        with patch.object(secretary, 'CONFIG', {'minutes_provider': 'codex'}), \
+             patch.object(secretary, 'devices', side_effect=OSError('synthetic device error')), \
+             patch.object(secretary, 'speech_ready', return_value=False), \
+             patch.object(secretary, 'live_journals', return_value={'count': 0}), \
+             patch.object(secretary, 'status', return_value={'state': 'idle'}), \
+             patch.object(secretary, 'ensure_ollama') as start_service, \
+             patch.object(secretary, 'api') as api, \
+             patch.object(secretary, 'output') as output:
+            secretary.doctor()
+        checks = output.call_args.args[0]['checks']
+        self.assertEqual(checks['audio_devices']['state'], 'unavailable')
+        self.assertEqual(checks['recording']['result']['state'], 'idle')
+        self.assertFalse(checks['speech_model']['result']['ready'])
+        self.assertEqual(checks['minutes_models']['state'], 'not_required')
+        start_service.assert_not_called()
+        api.assert_not_called()
 
     def test_failed_start_requests_prominent_alert(self):
         args = argparse.Namespace(title='Synthetic')
