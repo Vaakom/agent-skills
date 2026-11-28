@@ -6,7 +6,7 @@
 |---|---|---|
 | [Dion Secretary](dion-secretary/SKILL.md) | Записывает встречи, расшифровывает локально, готовит протокол с ассистентом или локальной моделью | Windows, Python 3.12+, аудиоустройства; для записи Dion Speaker Helper |
 | [MESH Homework](mesh-homework/SKILL.md) | Собирает задания МЭШ за неделю и сохраняет Markdown | Браузерный инструмент, доступ к дневнику, Python; Windows для необязательного хранилища паролей |
-| [mos-meter-readings](mos-meter-readings/SKILL.md) | Получает и передаёт показания счётчиков воды и электричества на mos.ru | Codex, подключённый Microsoft Edge, авторизованный сеанс |
+| [mos-meter-readings](mos-meter-readings/SKILL.md) | Получает и передаёт показания счётчиков воды и электричества на mos.ru | Codex, подключённый Microsoft Edge или Google Chrome, авторизованный сеанс |
 | [YouTube Library](youtube-library/SKILL.md) | Импортирует свои плейлисты и лайки через YouTube API или Takeout | Python 3.12+; Windows для OAuth/DPAPI; Ollama для локальной классификации |
 | [Local Permissions](local-permissions/SKILL.md) | Выполняет уже разрешённые локальные операции через фиксированные submit.py и run.py | Существующая Windows-инсталляция products/local-permissions и её правила; код запускателя в репозиторий не входит |
 
@@ -16,7 +16,7 @@
 
 Read and submit Moscow water and electricity meter readings with Codex.
 
-Скилл читает показания воды и электричества через API mos.ru. Воду передаёт через API «Электронного дома», электричество — через форму mos.ru. Работа проверена в Codex с подключённым Microsoft Edge. Войдите в mos.ru в этом профиле браузера, а для передачи воды через API также авторизуйтесь в «Электронном доме».
+Скилл читает показания воды и электричества через API mos.ru. Воду передаёт через API «Электронного дома», электричество — через форму mos.ru. Чтение через API проверено в Edge и Chrome. Прямая передача воды через API из Codex проверена в Edge. Войдите в mos.ru в этом профиле браузера, а для передачи воды через API также авторизуйтесь в «Электронном доме».
 
 Из папки своего проекта выполните команду Skills CLI:
 
